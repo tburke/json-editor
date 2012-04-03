@@ -9,6 +9,7 @@ import (
     "strconv"
     "fmt"
     "html/template"
+    "reflect"
 )
 
 type Actor struct {
@@ -43,16 +44,16 @@ func listActors(w io.Writer, actors []Actor) {
 }
 
 func editActor(w io.Writer, actors []Actor, id int64) {
-    t, _ := template.New("tib").Parse(`<h1>edit</h1>
+    t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(`<h1>edit</h1>
 <a href="/">List</a><br/>
 <form action="" method="POST">
 <h2>{{.Id}}</h2>
 displayName: <input name="DisplayName" value="{{.DisplayName}}"  size="50" /><br/>
 url: <input name="Url" value="{{.Url}}" size="50" /><br/>
 rid: <input name="Rid" value="{{.Rid}}" /><br/>
-<select>
-<option value="service">service</option>
-<option value="person">person</option>
+<select name="ObjectType">
+<option {{if eq .ObjectType "service"}}selected="1"{{end}}>service</option>
+<option {{if eq .ObjectType "person"}}selected="1"{{end}}>person</option>
 </select><br/>
  {{.ObjectType}}
 <input type="submit" value="submit"/>
