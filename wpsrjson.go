@@ -30,8 +30,8 @@ func actors(filename string) (v map[string][]Actor) {
 }
 
 func listActors(w io.Writer, actors []Actor) {
-    t, err := template.New("tib").Parse(`<h1>test</h1>
-{{range .}}{{.Id}} {{.DisplayName}}
+    t, err := template.New("tib").Parse(`<h1>Actors</h1>
+{{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
 {{end}}`)
     if err != nil {
         fmt.Printf("err %v",err)
@@ -44,7 +44,19 @@ func listActors(w io.Writer, actors []Actor) {
 
 func editActor(w io.Writer, actors []Actor, id int64) {
     t, _ := template.New("tib").Parse(`<h1>edit</h1>
-{{.Id}} {{.DisplayName}}
+<a href="/">List</a><br/>
+<form action="" method="POST">
+<h2>{{.Id}}</h2>
+displayName: <input name="DisplayName" value="{{.DisplayName}}"  size="50" /><br/>
+url: <input name="Url" value="{{.Url}}" size="50" /><br/>
+rid: <input name="Rid" value="{{.Rid}}" /><br/>
+<select>
+<option value="service">service</option>
+<option value="person">person</option>
+</select><br/>
+ {{.ObjectType}}
+<input type="submit" value="submit"/>
+</form>
 `)
     for _, a := range actors {
         if a.Id == id {
