@@ -3,6 +3,7 @@ package main
 import (
     "encoding/json"
     "net/http"
+    "net/url"
     "log"
     "os"
     "io"
@@ -20,7 +21,9 @@ type Actor struct {
     ObjectType string `json:"objectType"`
 }
 
-func actors(filename string) (v map[string][]Actor) {
+type Actors []Actor;
+
+func actors(filename string) (v map[string]Actors) {
     obj, _ := os.Open(filename)
     dec := json.NewDecoder(obj)
     if err := dec.Decode(&v); err != nil {
@@ -30,7 +33,17 @@ func actors(filename string) (v map[string][]Actor) {
     return v
 }
 
-func listActors(w io.Writer, actors []Actor) {
+func (actors Actors) actor(id int64) Actor {
+    for _, a := range actors {
+        if a.Id == id {
+            return a
+        }
+    }
+  return Actor{"","",0,id,"person"}
+}
+
+
+func listActors(w io.Writer, actors Actors) {
     t, err := template.New("tib").Parse(`<h1>Actors</h1>
 {{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
 {{end}}`)
@@ -43,56 +56,61 @@ func listActors(w io.Writer, actors []Actor) {
         }
 }
 
-func editActor(w io.Writer, actors []Actor, id int64) {
+func editActor(w io.Writer, actors Actors, id int64) {
     t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(`<h1>edit</h1>
 <a href="/">List</a><br/>
 <form action="" method="POST">
 <h2>{{.Id}}</h2>
-displayName: <input name="DisplayName" value="{{.DisplayName}}"  size="50" /><br/>
-url: <input name="Url" value="{{.Url}}" size="50" /><br/>
-rid: <input name="Rid" value="{{.Rid}}" /><br/>
-<select name="ObjectType">
+displayName: <input name="displayname" value="{{.DisplayName}}" size="50" /><br/>
+url: <input name="url" value="{{.Url}}" size="50" /><br/>
+rid: <input name="rid" value="{{.Rid}}" /><br/>
+<select name="objecttype">
 <option {{if eq .ObjectType "service"}}selected="1"{{end}}>service</option>
 <option {{if eq .ObjectType "person"}}selected="1"{{end}}>person</option>
 </select><br/>
  {{.ObjectType}}
-<input type="submit" value="submit"/>
+<input type="submit" value="submit" />
 </form>
 `)
-    for _, a := range actors {
-        if a.Id == id {
-            t.Execute(w,a)
-        }
-    }
+    t.Execute(w,actors.actor(id))
+}
+
+func saveactor(id int64, v url.Values) {
+    as := actors("objects.json")
+    a := as["actors"].actor(id)
+    a.DisplayName = v["displayname"][0]
+    fmt.Fprintf(os.Stdout, "Actor is %v\n",a)
 }
 
 func edithandler(w http.ResponseWriter, r *http.Request) {
+    // if GET, show edit. If POST update.
     ID, _ := strconv.ParseInt(r.URL.Path[len("/edit/"):], 10,64)
+    if r.Method=="POST" {
+        r.ParseForm()
+        saveactor(ID, r.Form)
+    }
     v := actors("objects.json")
     editActor(w, v["actors"], ID)
 }
 
-func handler(w http.ResponseWriter, r *http.Request) {
-    v := actors("objects.json")
-    listActors(w, v["actors"])
+func listhandler(w http.ResponseWriter, r *http.Request) {
+    listActors(w, actors("objects.json")["actors"])
 }
 
 func web() {
-    http.HandleFunc("/", handler)
+    http.HandleFunc("/", listhandler)
     http.HandleFunc("/edit/", edithandler)
     http.ListenAndServe(":8080", nil)
 }
 
 func main() {
     if len(os.Args) < 2 {
-        v := actors("objects.json")
-        listActors(os.Stdout, v["actors"])
+        listActors(os.Stdout, actors("objects.json")["actors"])
     } else if os.Args[1] == "web" {
         web()
     } else {
-        v := actors("objects.json")
         ID, _ := strconv.ParseInt(os.Args[1],10,64)
-        editActor(os.Stdout, v["actors"],ID)
+        editActor(os.Stdout, actors("objects.json")["actors"],ID)
     }
 }
     /*
