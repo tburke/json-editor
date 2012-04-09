@@ -11,7 +11,6 @@ import (
     "fmt"
     "html/template"
     "reflect"
-    // "io/ioutil"
 )
 
 type Actor struct {
@@ -45,16 +44,10 @@ func (actors Actors) actor(id int64) *Actor {
 
 
 func listActors(w io.Writer, actors Actors) {
-    t, err := template.New("tib").Parse(`<h1>Actors</h1>
+    t, _ := template.New("tib").Parse(`<h1>Actors</h1>
 {{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
 {{end}}`)
-    if err != nil {
-        fmt.Printf("err %v",err)
-        }
-    err = t.Execute(w,actors)
-    if err != nil {
-        fmt.Printf("err %v",err)
-        }
+    t.Execute(w,actors)
 }
 
 func editActor(w io.Writer, actors Actors, id int64) {
@@ -121,12 +114,6 @@ func main() {
         listActors(os.Stdout, actors("object2.json")["actors"])
     } else if os.Args[1] == "web" {
         web()
-    } else if os.Args[1] == "get" {
-        js := loadJson(os.Args[2])
-          // "http://cdn.wapolabs.com/trove/authors/objects.json")
-        fmt.Printf("Obj: %v\n",js)
-        ent := js.(map[string]interface{})
-        fmt.Printf("\nId: %s\nName: %s\n",ent["id"],ent["name"])
     } else {
         ID, _ := strconv.ParseInt(os.Args[1],10,64)
         editActor(os.Stdout, actors("object2.json")["actors"],ID)
