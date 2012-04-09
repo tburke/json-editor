@@ -11,6 +11,7 @@ import (
     "fmt"
     "html/template"
     "reflect"
+    // "io/ioutil"
 )
 
 type Actor struct {
@@ -21,7 +22,7 @@ type Actor struct {
     ObjectType string `json:"objectType"`
 }
 
-type Actors []Actor;
+type Actors []*Actor;
 
 func actors(filename string) (v map[string]Actors) {
     obj, _ := os.Open(filename)
@@ -33,13 +34,13 @@ func actors(filename string) (v map[string]Actors) {
     return v
 }
 
-func (actors Actors) actor(id int64) Actor {
+func (actors Actors) actor(id int64) *Actor {
     for _, a := range actors {
         if a.Id == id {
             return a
         }
     }
-  return Actor{"","",0,id,"person"}
+    return nil
 }
 
 
@@ -57,7 +58,74 @@ func listActors(w io.Writer, actors Actors) {
 }
 
 func editActor(w io.Writer, actors Actors, id int64) {
-    t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(`<h1>edit</h1>
+    t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(editTemplate)
+    t.Execute(w,actors.actor(id))
+}
+
+func saveactor(id int64, v url.Values) {
+    as := actors("object2.json")
+    a := as["actors"].actor(id)
+    if a == nil {
+      a := Actor{"","",0,id,"person"}
+      as["actors"] = append(as["actors"], &a)
+    }
+    RID, _ := strconv.ParseInt(v["rid"][0],10,64)
+    a.Rid = RID
+    a.DisplayName = v["displayname"][0]
+    a.Url = v["url"][0]
+    a.ObjectType = v["objecttype"][0]
+    fh, _ := os.Create("object2.json")
+    json.NewEncoder(fh).Encode(&as)
+}
+
+func edithandler(w http.ResponseWriter, r *http.Request) {
+    // if GET, show edit. If POST update.
+    ID, _ := strconv.ParseInt(r.URL.Path[len("/edit/"):], 10,64)
+    if r.Method=="POST" {
+        r.ParseForm()
+        saveactor(ID, r.Form)
+    }
+    v := actors("object2.json")
+    editActor(w, v["actors"], ID)
+}
+
+func listhandler(w http.ResponseWriter, r *http.Request) {
+    listActors(w, actors("object2.json")["actors"])
+}
+
+func loadJson(url string) (v interface{}) {
+    resp, _ := http.Get(url)
+    defer resp.Body.Close()
+    dec := json.NewDecoder(resp.Body)
+    if err := dec.Decode(&v); err != nil {
+        log.Println(err)
+        return
+    }
+    return v
+}
+
+func web() {
+    http.HandleFunc("/", listhandler)
+    http.HandleFunc("/edit/", edithandler)
+    http.ListenAndServe(":8080", nil)
+}
+
+func main() {
+    if len(os.Args) < 2 {
+        listActors(os.Stdout, actors("object2.json")["actors"])
+    } else if os.Args[1] == "web" {
+        web()
+    } else if os.Args[1] == "get" {
+        js := loadJson(os.Args[2])
+          // "http://cdn.wapolabs.com/trove/authors/objects.json")
+        fmt.Printf("Obj: %v\n",js)
+    } else {
+        ID, _ := strconv.ParseInt(os.Args[1],10,64)
+        editActor(os.Stdout, actors("object2.json")["actors"],ID)
+    }
+}
+
+const editTemplate = `<h1>edit</h1>
 <a href="/">List</a><br/>
 <form action="" method="POST">
 <h2>{{.Id}}</h2>
@@ -71,60 +139,5 @@ rid: <input name="rid" value="{{.Rid}}" /><br/>
  {{.ObjectType}}
 <input type="submit" value="submit" />
 </form>
-`)
-    t.Execute(w,actors.actor(id))
-}
-
-func saveactor(id int64, v url.Values) {
-    as := actors("objects.json")
-    a := as["actors"].actor(id)
-    a.DisplayName = v["displayname"][0]
-    fmt.Fprintf(os.Stdout, "Actor is %v\n",a)
-}
-
-func edithandler(w http.ResponseWriter, r *http.Request) {
-    // if GET, show edit. If POST update.
-    ID, _ := strconv.ParseInt(r.URL.Path[len("/edit/"):], 10,64)
-    if r.Method=="POST" {
-        r.ParseForm()
-        saveactor(ID, r.Form)
-    }
-    v := actors("objects.json")
-    editActor(w, v["actors"], ID)
-}
-
-func listhandler(w http.ResponseWriter, r *http.Request) {
-    listActors(w, actors("objects.json")["actors"])
-}
-
-func web() {
-    http.HandleFunc("/", listhandler)
-    http.HandleFunc("/edit/", edithandler)
-    http.ListenAndServe(":8080", nil)
-}
-
-func main() {
-    if len(os.Args) < 2 {
-        listActors(os.Stdout, actors("objects.json")["actors"])
-    } else if os.Args[1] == "web" {
-        web()
-    } else {
-        ID, _ := strconv.ParseInt(os.Args[1],10,64)
-        editActor(os.Stdout, actors("objects.json")["actors"],ID)
-    }
-}
-    /*
-    // dec := json.NewDecoder(os.Stdin)
-    enc := json.NewEncoder(os.Stdout)
-    for k, vv := range v {
-        if k == "actors" {
-            for _, u := range vv {
-                fmt.Printf("%d\t%v\n",u.Id, u)
-            }
-        }
-    }
-    if err := enc.Encode(&v); err != nil {
-        log.Println(err)
-    }
-    */
+`
 
