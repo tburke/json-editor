@@ -59,15 +59,21 @@ func listActors(w io.Writer, actors Actors) {
 
 func editActor(w io.Writer, actors Actors, id int64) {
     t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(editTemplate)
-    t.Execute(w,actors.actor(id))
+    a := actors.actor(id)
+    if a == nil {
+        js := loadJson(fmt.Sprintf("https://graph.facebook.com/%d",id))
+        ent := js.(map[string]interface{})
+        a = &Actor{ent["name"].(string),ent["link"].(string),0,id,"person"}
+    }
+    t.Execute(w,a)
 }
 
 func saveactor(id int64, v url.Values) {
     as := actors("object2.json")
     a := as["actors"].actor(id)
     if a == nil {
-      a := Actor{"","",0,id,"person"}
-      as["actors"] = append(as["actors"], &a)
+      a = &Actor{"","",0,id,"person"}
+      as["actors"] = append(as["actors"], a)
     }
     RID, _ := strconv.ParseInt(v["rid"][0],10,64)
     a.Rid = RID
@@ -119,6 +125,8 @@ func main() {
         js := loadJson(os.Args[2])
           // "http://cdn.wapolabs.com/trove/authors/objects.json")
         fmt.Printf("Obj: %v\n",js)
+        ent := js.(map[string]interface{})
+        fmt.Printf("\nId: %s\nName: %s\n",ent["id"],ent["name"])
     } else {
         ID, _ := strconv.ParseInt(os.Args[1],10,64)
         editActor(os.Stdout, actors("object2.json")["actors"],ID)
