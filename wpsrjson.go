@@ -21,20 +21,27 @@ type Actor struct {
     ObjectType string `json:"objectType"`
 }
 
-type Actors []*Actor;
+type Actors map[string][]*Actor;
 
-func actors(filename string) (v map[string]Actors) {
-    obj, _ := os.Open(filename)
-    dec := json.NewDecoder(obj)
-    if err := dec.Decode(&v); err != nil {
-        log.Println(err)
-        return
+const actorsFile = "objects.json"
+const actorsUrl = "http://cdn.wapolabs.com/trove/authors/objects.json"
+
+func (actors *Actors) load() {
+    var obj io.ReadCloser
+    obj, ferr := os.Open(actorsFile)
+    if ferr != nil {
+        resp, _ := http.Get(actorsUrl)
+        defer resp.Body.Close()
+        obj = resp.Body
     }
-    return v
+    dec := json.NewDecoder(obj)
+    if err := dec.Decode(&actors); err != nil {
+        log.Println(err)
+    }
 }
 
 func (actors Actors) actor(id int64) *Actor {
-    for _, a := range actors {
+    for _, a := range actors["actors"] {
         if a.Id == id {
             return a
         }
@@ -42,15 +49,14 @@ func (actors Actors) actor(id int64) *Actor {
     return nil
 }
 
-
-func listActors(w io.Writer, actors Actors) {
+func (actors Actors) list(w io.Writer) {
     t, _ := template.New("tib").Parse(`<h1>Actors</h1>
 {{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
 {{end}}`)
-    t.Execute(w,actors)
+    t.Execute(w,actors["actors"])
 }
 
-func editActor(w io.Writer, actors Actors, id int64) {
+func (actors Actors) edit(w io.Writer, id int64) {
     t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(editTemplate)
     a := actors.actor(id)
     if a == nil {
@@ -62,19 +68,20 @@ func editActor(w io.Writer, actors Actors, id int64) {
 }
 
 func saveactor(id int64, v url.Values) {
-    as := actors("object2.json")
-    a := as["actors"].actor(id)
+    var actors Actors
+    actors.load()
+    a := actors.actor(id)
     if a == nil {
       a = &Actor{"","",0,id,"person"}
-      as["actors"] = append(as["actors"], a)
+      actors["actors"] = append(actors["actors"], a)
     }
     RID, _ := strconv.ParseInt(v["rid"][0],10,64)
     a.Rid = RID
     a.DisplayName = v["displayname"][0]
     a.Url = v["url"][0]
     a.ObjectType = v["objecttype"][0]
-    fh, _ := os.Create("object2.json")
-    json.NewEncoder(fh).Encode(&as)
+    fh, _ := os.Create(actorsFile)
+    json.NewEncoder(fh).Encode(&actors)
 }
 
 func edithandler(w http.ResponseWriter, r *http.Request) {
@@ -84,12 +91,15 @@ func edithandler(w http.ResponseWriter, r *http.Request) {
         r.ParseForm()
         saveactor(ID, r.Form)
     }
-    v := actors("object2.json")
-    editActor(w, v["actors"], ID)
+    var actors Actors
+    actors.load()
+    actors.edit(w, ID)
 }
 
 func listhandler(w http.ResponseWriter, r *http.Request) {
-    listActors(w, actors("object2.json")["actors"])
+    var actors Actors
+    actors.load()
+    actors.list(w)
 }
 
 func loadJson(url string) (v interface{}) {
@@ -110,15 +120,19 @@ func web() {
 }
 
 func main() {
+    var actors Actors
     if len(os.Args) < 2 {
-        listActors(os.Stdout, actors("object2.json")["actors"])
-    } else if os.Args[1] == "web" {
         web()
+    } else if os.Args[1] == "list" {
+        actors.load()
+        actors.list(os.Stdout)
     } else {
         ID, _ := strconv.ParseInt(os.Args[1],10,64)
-        editActor(os.Stdout, actors("object2.json")["actors"],ID)
+        actors.load()
+        actors.edit(os.Stdout, ID)
     }
 }
+
 
 const editTemplate = `<h1>edit</h1>
 <a href="/">List</a><br/>
