@@ -51,13 +51,19 @@ func (actors Actors) actor(id int64) *Actor {
 
 func (actors Actors) list(w io.Writer) {
     t, _ := template.New("tib").Parse(`<h1>Actors</h1>
+<form action="/edit/" method="POST">
+New: <input name="id" >
+</form>
 {{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
-{{end}}`)
+{{end}}
+`)
     t.Execute(w,actors["actors"])
 }
 
-func (actors Actors) edit(w io.Writer, id int64) {
+func (actors Actors) edit(w io.Writer, sid string) {
     t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(editTemplate)
+    
+    id, _ := strconv.ParseInt(sid,10,64)
     a := actors.actor(id)
     if a == nil {
         js := loadJson(fmt.Sprintf("https://graph.facebook.com/%d",id))
@@ -84,16 +90,23 @@ func saveactor(id int64, v url.Values) {
     json.NewEncoder(fh).Encode(&actors)
 }
 
+
 func edithandler(w http.ResponseWriter, r *http.Request) {
     // if GET, show edit. If POST update.
-    ID, _ := strconv.ParseInt(r.URL.Path[len("/edit/"):], 10,64)
-    if r.Method=="POST" {
-        r.ParseForm()
+    r.ParseForm()
+    var id string
+    if len(r.URL.Path) > len(editPath) {
+        id = r.URL.Path[len(editPath):]
+    } else {
+        id = r.Form["id"][0]
+    }
+    if r.Method=="POST" && len(r.URL.Path) > len(editPath) {
+        ID, _ := strconv.ParseInt(id, 10,64)
         saveactor(ID, r.Form)
     }
     var actors Actors
     actors.load()
-    actors.edit(w, ID)
+    actors.edit(w, id)
 }
 
 func listhandler(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +128,7 @@ func loadJson(url string) (v interface{}) {
 
 func web() {
     http.HandleFunc("/", listhandler)
-    http.HandleFunc("/edit/", edithandler)
+    http.HandleFunc(editPath, edithandler)
     http.ListenAndServe(":8080", nil)
 }
 
@@ -127,13 +140,12 @@ func main() {
         actors.load()
         actors.list(os.Stdout)
     } else {
-        ID, _ := strconv.ParseInt(os.Args[1],10,64)
         actors.load()
-        actors.edit(os.Stdout, ID)
+        actors.edit(os.Stdout, os.Args[1])
     }
 }
 
-
+const editPath = "/edit/"
 const editTemplate = `<h1>edit</h1>
 <a href="/">List</a><br/>
 <form action="" method="POST">
