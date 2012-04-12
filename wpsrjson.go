@@ -11,6 +11,7 @@ import (
     "fmt"
     "html/template"
     "reflect"
+    "regexp"
 )
 
 type Actor struct {
@@ -25,8 +26,7 @@ type Actors map[string][]*Actor;
 
 const actorsFile = "objects.json"
 const actorsUrl = "http://cdn.wapolabs.com/trove/authors/objects.json"
-
-func (actors *Actors) load() {
+func (actors *Actors) load() *Actors {
     var obj io.ReadCloser
     obj, ferr := os.Open(actorsFile)
     if ferr != nil {
@@ -38,6 +38,7 @@ func (actors *Actors) load() {
     if err := dec.Decode(&actors); err != nil {
         log.Println(err)
     }
+    return actors
 }
 
 func (actors Actors) actor(id int64) *Actor {
@@ -50,69 +51,34 @@ func (actors Actors) actor(id int64) *Actor {
 }
 
 func (actors Actors) list(w io.Writer) {
-    t, _ := template.New("tib").Parse(`<h1>Actors</h1>
-<form action="/edit/" method="POST">
-New: <input name="id" >
-</form>
-{{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
-{{end}}
-`)
-    t.Execute(w,actors["actors"])
+    rootTemplate.Execute(w,actors["actors"])
 }
 
+func (actors Actors) save(w io.Writer) {
+    json.NewEncoder(w).Encode(&actors)
+}
+
+var dig = regexp.MustCompile(`^d+$`)
 func (actors Actors) edit(w io.Writer, sid string) {
-    t, _ := template.New("tib").Funcs(template.FuncMap{"eq": reflect.DeepEqual}).Parse(editTemplate)
-    
-    id, _ := strconv.ParseInt(sid,10,64)
-    a := actors.actor(id)
+    var a *Actor
+    if dig.MatchString(sid) {
+        id, _ := strconv.ParseInt(sid,10,64)
+        a = actors.actor(id)
+    }
     if a == nil {
-        js := loadJson(fmt.Sprintf("https://graph.facebook.com/%d",id))
+        js := loadJson(str2url(sid))
         ent := js.(map[string]interface{})
+        id, _ := strconv.ParseInt(ent["id"].(string), 10,64)
         a = &Actor{ent["name"].(string),ent["link"].(string),0,id,"person"}
     }
-    t.Execute(w,a)
+    editTemplate.Execute(w,a)
 }
 
-func saveactor(id int64, v url.Values) {
-    var actors Actors
-    actors.load()
-    a := actors.actor(id)
-    if a == nil {
-      a = &Actor{"","",0,id,"person"}
-      actors["actors"] = append(actors["actors"], a)
-    }
-    RID, _ := strconv.ParseInt(v["rid"][0],10,64)
-    a.Rid = RID
-    a.DisplayName = v["displayname"][0]
-    a.Url = v["url"][0]
-    a.ObjectType = v["objecttype"][0]
-    fh, _ := os.Create(actorsFile)
-    json.NewEncoder(fh).Encode(&actors)
-}
-
-
-func edithandler(w http.ResponseWriter, r *http.Request) {
-    // if GET, show edit. If POST update.
-    r.ParseForm()
-    var id string
-    if len(r.URL.Path) > len(editPath) {
-        id = r.URL.Path[len(editPath):]
-    } else {
-        id = r.Form["id"][0]
-    }
-    if r.Method=="POST" && len(r.URL.Path) > len(editPath) {
-        ID, _ := strconv.ParseInt(id, 10,64)
-        saveactor(ID, r.Form)
-    }
-    var actors Actors
-    actors.load()
-    actors.edit(w, id)
-}
-
-func listhandler(w http.ResponseWriter, r *http.Request) {
-    var actors Actors
-    actors.load()
-    actors.list(w)
+func (actor Actor) update(v url.Values) {
+    actor.Rid, _ = strconv.ParseInt(v["rid"][0],10,64)
+    actor.DisplayName = v["displayname"][0]
+    actor.Url = v["url"][0]
+    actor.ObjectType = v["objecttype"][0]
 }
 
 func loadJson(url string) (v interface{}) {
@@ -126,27 +92,82 @@ func loadJson(url string) (v interface{}) {
     return v
 }
 
-func web() {
+func edithandler(w http.ResponseWriter, r *http.Request) {
+    // if GET, show edit. If POST update.
+    r.ParseForm()
+    pathid := len(r.URL.Path) > len(editPath)
+    var id string
+    if pathid {
+        id = r.URL.Path[len(editPath):]
+    } else {
+        id = r.Form["id"][0]
+    }
+    var actors Actors
+    actors.load()
+    if r.Method=="POST" && pathid {
+        ID, _ := strconv.ParseInt(id, 10,64)
+        a := actors.actor(ID)
+        if a == nil {
+          a = &Actor{"","",0,ID,"person"}
+          actors["actors"] = append(actors["actors"], a)
+        }
+        a.update(r.Form)
+        fh, _ := os.Create(actorsFile)
+        actors.save(fh)
+    }
+    actors.edit(w, id)
+}
+
+func listhandler(w http.ResponseWriter, r *http.Request) {
+    var actors Actors
+    actors.load().list(w)
+}
+
+func web(port string) {
     http.HandleFunc("/", listhandler)
     http.HandleFunc(editPath, edithandler)
-    http.ListenAndServe(":8080", nil)
+    http.ListenAndServe(port, nil)
+}
+
+func str2url(ent string) string {
+    var url string
+    http, _ := regexp.MatchString("^http",ent)
+    if http {
+        re, _ := regexp.Compile("www")
+        url = re.ReplaceAllString(ent,"graph")
+    } else {
+        url = fmt.Sprintf("http://graph.facebook.com/%s",ent)
+    }
+    return url
 }
 
 func main() {
     var actors Actors
     if len(os.Args) < 2 {
-        web()
+        web(":8080")
     } else if os.Args[1] == "list" {
-        actors.load()
-        actors.list(os.Stdout)
+        actors.load().list(os.Stdout)
+    } else if os.Args[1] == "lookup" {
+        fmt.Printf("%s\n",str2url(os.Args[2]))
     } else {
-        actors.load()
-        actors.edit(os.Stdout, os.Args[1])
+        actors.load().edit(os.Stdout, os.Args[1])
     }
 }
 
 const editPath = "/edit/"
-const editTemplate = `<h1>edit</h1>
+
+var rootTemplate = template.Must(template.New("root").Parse(`
+<h1>Actors</h1>
+<form action="/edit/" method="POST">
+New: <input name="id" >
+</form>
+{{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
+{{end}}
+`))
+
+var editTemplate = template.Must(template.New("edit").Funcs(
+  template.FuncMap{"eq": reflect.DeepEqual}).Parse(`
+<h1>edit</h1>
 <a href="/">List</a><br/>
 <form action="" method="POST">
 <h2>{{.Id}}</h2>
@@ -160,5 +181,5 @@ rid: <input name="rid" value="{{.Rid}}" /><br/>
  {{.ObjectType}}
 <input type="submit" value="submit" />
 </form>
-`
+`))
 
