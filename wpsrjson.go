@@ -12,6 +12,7 @@ import (
     "html/template"
     "reflect"
     "regexp"
+    "flag"
 )
 
 type Actor struct {
@@ -147,15 +148,17 @@ func str2url(ent string) string {
 }
 
 func main() {
+    var port string
+    flag.StringVar(&port,"http",":8080","http port")
+    flag.Parse()
+    fmt.Printf("Args: %d\n",flag.NArg())
     var actors Actors
-    if len(os.Args) < 2 {
-        web(":8080")
-    } else if os.Args[1] == "list" {
+    if flag.NArg() < 1 {
+        web(port)
+    } else if flag.Arg(0) == "list" {
         actors.load().list(os.Stdout)
-    } else if os.Args[1] == "lookup" {
-        fmt.Printf("%s\n",str2url(os.Args[2]))
     } else {
-        actors.load().edit(os.Stdout, os.Args[1])
+        actors.load().edit(os.Stdout, flag.Arg(0))
     }
 }
 
