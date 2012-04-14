@@ -58,7 +58,7 @@ func (actors Actors) save(w io.Writer) {
     json.NewEncoder(w).Encode(&actors)
 }
 
-var dig = regexp.MustCompile(`^d+$`)
+var dig = regexp.MustCompile(`^\d+$`)
 func (actors Actors) edit(w io.Writer, sid string) {
     var a *Actor
     if dig.MatchString(sid) {
@@ -74,7 +74,7 @@ func (actors Actors) edit(w io.Writer, sid string) {
     editTemplate.Execute(w,a)
 }
 
-func (actor Actor) update(v url.Values) {
+func (actor *Actor) update(v url.Values) {
     actor.Rid, _ = strconv.ParseInt(v["rid"][0],10,64)
     actor.DisplayName = v["displayname"][0]
     actor.Url = v["url"][0]
@@ -104,7 +104,7 @@ func edithandler(w http.ResponseWriter, r *http.Request) {
     }
     var actors Actors
     actors.load()
-    if r.Method=="POST" && pathid {
+    if r.Method=="POST" && dig.MatchString(id) {
         ID, _ := strconv.ParseInt(id, 10,64)
         a := actors.actor(ID)
         if a == nil {
@@ -171,6 +171,7 @@ var editTemplate = template.Must(template.New("edit").Funcs(
 <a href="/">List</a><br/>
 <form action="" method="POST">
 <h2>{{.Id}}</h2>
+<input name="id" type="hidden" value="{{.Id}}" />
 displayName: <input name="displayname" value="{{.DisplayName}}" size="50" /><br/>
 url: <input name="url" value="{{.Url}}" size="50" /><br/>
 rid: <input name="rid" value="{{.Rid}}" /><br/>
@@ -179,7 +180,7 @@ rid: <input name="rid" value="{{.Rid}}" /><br/>
 <option {{if eq .ObjectType "person"}}selected="1"{{end}}>person</option>
 </select><br/>
  {{.ObjectType}}
-<input type="submit" value="submit" />
+<input type="submit" value="save" />
 </form>
 `))
 
