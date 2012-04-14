@@ -95,9 +95,8 @@ func loadJson(url string) (v interface{}) {
 func edithandler(w http.ResponseWriter, r *http.Request) {
     // if GET, show edit. If POST update.
     r.ParseForm()
-    pathid := len(r.URL.Path) > len(editPath)
     var id string
-    if pathid {
+    if len(r.URL.Path) > len(editPath) {
         id = r.URL.Path[len(editPath):]
     } else {
         id = r.Form["id"][0]
@@ -129,12 +128,18 @@ func web(port string) {
     http.ListenAndServe(port, nil)
 }
 
+var httppref = regexp.MustCompile(`^http`)
+var wwwpref = regexp.MustCompile(`www`)
+var entid = regexp.MustCompile(`\/\d+$`)
 func str2url(ent string) string {
     var url string
-    http, _ := regexp.MatchString("^http",ent)
-    if http {
-        re, _ := regexp.Compile("www")
-        url = re.ReplaceAllString(ent,"graph")
+    if httppref.MatchString(ent) {
+        id := entid.FindString(ent)
+        if len(id) > 1 {
+          url = fmt.Sprintf("http://graph.facebook.com/%s",id)
+        } else {
+          url = wwwpref.ReplaceAllString(ent,"graph")
+        }
     } else {
         url = fmt.Sprintf("http://graph.facebook.com/%s",ent)
     }
@@ -159,10 +164,12 @@ const editPath = "/edit/"
 var rootTemplate = template.Must(template.New("root").Parse(`
 <h1>Actors</h1>
 <form action="/edit/" method="POST">
-New: <input name="id" >
+New Actor: <input name="id" >
 </form>
-{{range .}}<a href="/edit/{{.Id}}">{{.DisplayName}}</a><br/>
+<ul>
+{{range .}}<li><a href="/edit/{{.Id}}">{{.DisplayName}}</a></li>
 {{end}}
+</ul>
 `))
 
 var editTemplate = template.Must(template.New("edit").Funcs(
