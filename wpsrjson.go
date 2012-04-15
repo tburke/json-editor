@@ -151,7 +151,6 @@ func main() {
     var port string
     flag.StringVar(&port,"http",":8080","http port")
     flag.Parse()
-    fmt.Printf("Args: %d\n",flag.NArg())
     var actors Actors
     if flag.NArg() < 1 {
         web(port)
