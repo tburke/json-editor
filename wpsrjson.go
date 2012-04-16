@@ -67,7 +67,7 @@ func (actors Actors) edit(w io.Writer, sid string) {
 		a = actors.actor(id)
 	}
 	var ent map[string]interface{}
-	if a == nil && loadJson(fmt.Sprintf("http://graph.facebook.com/%s", match), ent) == nil {
+	if a == nil && loadJson(fmt.Sprintf("http://graph.facebook.com/%s", match), &ent) == nil {
 		id, _ := strconv.ParseInt(ent["id"].(string), 10, 64)
 		a = &Actor{ent["name"].(string), ent["link"].(string), 0, id, "person"}
 	}
