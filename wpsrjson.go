@@ -48,28 +48,29 @@ func (actors Actors) actor(id int64) *Actor {
 	return nil
 }
 
-func (actors Actors) list(w io.Writer) {
-	rootTemplate.Execute(w, actors["actors"])
-}
-
 func (actors Actors) save(w io.Writer) {
 	json.NewEncoder(w).Encode(&actors)
 }
 
-var dig = regexp.MustCompile(`^\d+$`)
+func (actors Actors) list(w io.Writer) {
+	rootTemplate.Execute(w, actors["actors"])
+}
 
+var fbmatch = regexp.MustCompile(`[^\/]+$`)
+var dig = regexp.MustCompile(`^\d+$`)
 func (actors Actors) edit(w io.Writer, sid string) {
 	var a *Actor
-	if dig.MatchString(sid) {
-		id, _ := strconv.ParseInt(sid, 10, 64)
+	match := fbmatch.FindString(sid)
+	if len(match) < 1 {
+		return
+	} else if dig.MatchString(sid) {
+		id, _ := strconv.ParseInt(match, 10, 64)
 		a = actors.actor(id)
 	}
-	if a == nil {
-		var ent map[string]interface{}
-		if loadJson(str2url(sid), ent) == nil {
-		    id, _ := strconv.ParseInt(ent["id"].(string), 10, 64)
-		    a = &Actor{ent["name"].(string), ent["link"].(string), 0, id, "person"}
-		}
+	var ent map[string]interface{}
+	if a == nil && loadJson(fmt.Sprintf("http://graph.facebook.com/%s", match), ent) == nil {
+		id, _ := strconv.ParseInt(ent["id"].(string), 10, 64)
+		a = &Actor{ent["name"].(string), ent["link"].(string), 0, id, "person"}
 	}
 	editTemplate.Execute(w, a)
 }
@@ -124,15 +125,6 @@ func web(port string) {
 	http.HandleFunc("/", listhandler)
 	http.HandleFunc(editPath, edithandler)
 	http.ListenAndServe(port, nil)
-}
-
-var fbmatch = regexp.MustCompile(`[^\/]+$`)
-func str2url(ent string) string {
-	match := fbmatch.FindString(ent)
-	if len(match) > 0 {
-		return fmt.Sprintf("http://graph.facebook.com/%s", match)
-	}
-	return match
 }
 
 func main() {
