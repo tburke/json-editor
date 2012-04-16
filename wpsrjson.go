@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -34,7 +33,7 @@ func (actors *Actors) load() *Actors {
 	if ferr != nil {
 		loadJson(actorsUrl, actors)
 	} else if err := json.NewDecoder(obj).Decode(actors); err != nil {
-		log.Println(err)
+		fmt.Println(err)
 	}
 	return actors
 }
