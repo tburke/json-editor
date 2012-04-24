@@ -123,6 +123,7 @@ func listhandler(w http.ResponseWriter, r *http.Request) {
 func web(port string) {
 	http.HandleFunc("/", listhandler)
 	http.HandleFunc(editPath, edithandler)
+	fmt.Printf("Listening on http://localhost%s\n^C to end\n",port)
 	http.ListenAndServe(port, nil)
 }
 
